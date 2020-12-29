@@ -2269,6 +2269,15 @@ static void handle_skipreq(int sig) {
 
 }
 
+/* Handle visualizer request (SIGUSR2) */
+
+static void handle_visualizerreq(int sig) {
+
+  (void)sig;
+  afl_states_request_visualizer();
+
+}
+
 /* Setup shared map for fuzzing with input via sharedmem */
 
 void setup_testcase_shmem(afl_state_t *afl) {
@@ -2630,6 +2639,10 @@ void setup_signal_handlers(void) {
   sigaction(SIGTSTP, &sa, NULL);
   sigaction(SIGPIPE, &sa, NULL);
 
+  /* SIGUSR2: visualizer stuff */
+
+  sa.sa_handler = handle_visualizerreq;
+  sigaction(SIGUSR2, &sa, NULL);
 }
 
 /* Make a copy of the current command line. */

@@ -24,6 +24,7 @@
  */
 
 #include "afl-fuzz.h"
+#include "visualizer.h"
 #include <limits.h>
 
 /* Write bitmap to file. The bitmap is useful mostly for the secret
@@ -625,6 +626,14 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
     if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", queue_fn); }
     ck_write(fd, mem, len, queue_fn);
     close(fd);
+
+    if (afl->visualizer_mode) {
+
+      // Do we need to free queue_fn?
+      // prepare the seed
+      visualizer_prepare_seed(afl, queue_fn);
+
+    }
 
     keeping = 1;
 

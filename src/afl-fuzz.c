@@ -281,7 +281,7 @@ int main(int argc, char **argv_orig, char **envp) {
 
   while ((opt = getopt(
               argc, argv,
-              "+b:c:i:I:o:f:F:m:t:T:dDnCB:S:M:x:QNUWe:p:s:V:E:L:hRP:")) > 0) {
+              "+b:c:i:I:o:f:F:m:t:T:dDnCB:S:M:x:QNUWe:p:s:V:E:L:hRP:Z")) > 0) {
 
     switch (opt) {
 
@@ -808,6 +808,10 @@ int main(int argc, char **argv_orig, char **envp) {
             "(custom_mutators/radamsa/).");
 
         break;
+
+      case 'Z':
+	afl->visualizer_mode = 1;
+	break;
 
       default:
         if (!show_help) { show_help = 1; }

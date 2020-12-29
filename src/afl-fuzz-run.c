@@ -30,6 +30,7 @@
 #include <limits.h>
 
 #include "cmplog.h"
+#include "visualizer.h"
 
 #ifdef PROFILING
 u64 time_spent_working = 0;
@@ -860,6 +861,11 @@ u8 __attribute__((hot))
 common_fuzz_stuff(afl_state_t *afl, u8 *out_buf, u32 len) {
 
   u8 fault;
+
+  if (afl->visualizer_requested) {
+    visualizer_afl(afl);
+    afl->visualizer_requested = 0;
+  }
 
   write_to_testcase(afl, out_buf, len);
 

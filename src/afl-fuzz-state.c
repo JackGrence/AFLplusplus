@@ -155,6 +155,9 @@ void afl_state_init(afl_state_t *afl, uint32_t map_size) {
   afl->stats_last_execs = 0;
   afl->stats_avg_exec = -1;
 
+  afl->visualizer_mode = 0;
+  afl->visualizer_requested = 0;
+
   init_mopt_globals(afl);
 
   list_append(&afl_states, afl);
@@ -485,6 +488,12 @@ void afl_states_clear_screen(void) {
 void afl_states_request_skip(void) {
 
   LIST_FOREACH(&afl_states, afl_state_t, { el->skip_requested = 1; });
+
+}
+
+void afl_states_request_visualizer(void) {
+
+  LIST_FOREACH(&afl_states, afl_state_t, { el->visualizer_requested = 1; });
 
 }
 

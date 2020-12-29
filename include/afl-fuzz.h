@@ -659,6 +659,9 @@ typedef struct afl_state {
    * they do not call another function */
   u8 *map_tmp_buf;
 
+  u32 visualizer_mode;
+  u32 visualizer_requested;
+
 } afl_state_t;
 
 struct custom_mutator {
@@ -868,6 +871,8 @@ void afl_states_stop(void);
 void afl_states_clear_screen(void);
 /* Sets the skip flag on all states */
 void afl_states_request_skip(void);
+/* Sets the visualizer flag on all states */
+void afl_states_request_visualizer(void);
 
 /* Setup shmem for testcase delivery */
 void setup_testcase_shmem(afl_state_t *afl);
