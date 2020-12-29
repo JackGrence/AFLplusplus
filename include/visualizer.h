@@ -26,6 +26,8 @@ typedef struct vis_config {
 
   vis_action_t action;
   u64 addr;
+  u32 seed_num;
+  char **seeds;
   u32 value_num;
   vis_value_t *values;
 
@@ -34,5 +36,7 @@ typedef struct vis_config {
 void visualizer_afl(afl_state_t *afl);
 void visualizer_prepare_seed(afl_state_t *afl, u8 *queue_fn);
 vis_config_t *visualizer_get_config(afl_state_t *afl);
+void visualizer_free_config(vis_config_t *config);
+vis_config_t *visualizer_alloc_config(char *str);
 
 #endif /* ifndef _AFL_VISUALIZE_H */

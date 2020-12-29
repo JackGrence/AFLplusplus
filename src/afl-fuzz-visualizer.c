@@ -16,9 +16,8 @@ static int visualizer_http_fd(afl_state_t *afl) {
   bzero(&web_addr, sizeof(web_addr));
 
   web_addr.sin_family = AF_INET;
-  // TODO: afl config
-  web_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-  web_addr.sin_port = htons(5000);
+  web_addr.sin_addr.s_addr = inet_addr(afl->visualizer_host);
+  web_addr.sin_port = htons(afl->visualizer_port);
 
   if (connect(http_fd, (struct sockaddr *) &web_addr, sizeof(web_addr)) != 0) {
     close(http_fd);
@@ -28,53 +27,90 @@ static int visualizer_http_fd(afl_state_t *afl) {
   return http_fd;
 }
 
+vis_config_t *visualizer_alloc_config(char *str) {
+
+ /* "0 0x197d0 2 ./afl_inputs/vlanIntfs
+  * ./afl_inputs/vlan 2 r1 0 0x197d0 0x4141" */
+
+  vis_config_t *conf;
+  u32 offset, i;
+
+  // TODO: sscanf check
+  conf = ck_alloc(sizeof(*conf));
+  sscanf(str, "%d%Lx%d%n", (int *) &conf->action,
+	 &conf->addr, &conf->seed_num, &offset);
+  str += offset;
+
+  // parse seed
+  conf->seeds = ck_alloc(sizeof(char *) * conf->seed_num);
+  for (i = 0; i < conf->seed_num; ++i) {
+    conf->seeds[i] = ck_alloc(0x100);
+    sscanf(str, "%255s%n", conf->seeds[i], &offset);
+    str += offset;
+  }
+
+  // parse value
+  sscanf(str, "%d%n", &conf->value_num, &offset);
+  str += offset;
+  conf->values = ck_alloc(sizeof(vis_value_t) * conf->value_num);
+  for (i = 0; i < conf->value_num; ++i) {
+
+    sscanf(str, "%19s%Lx%n", conf->values[i].reg,
+	   &conf->values[i].value, &offset);
+    str += offset;
+
+  }
+
+  return conf;
+
+}
+
+void visualizer_free_config(vis_config_t *config) {
+
+  u32 i;
+  for (i = 0; i < config->seed_num; ++i) {
+    ck_free(config->seeds[i]);
+  }
+  ck_free(config->seeds);
+  ck_free(config->values);
+  ck_free(config);
+
+}
+
+static void visualizer_http_recv(int fd, char *buf, int len) {
+
+  int offset;
+  while ((offset = read(fd, buf, len)) > 0) {
+      buf += offset;
+      len -= offset;
+  }
+
+  if (offset < 0) { FATAL("HTTP recv fail"); }
+
+}
+
 vis_config_t *visualizer_get_config(afl_state_t *afl) {
 
   int http_fd;
   char *data = "GET /fuzzer HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
   char buf[0x400];
   char *ptr;
-  u32 len, offset, i;
+  u32 len;
   vis_config_t *conf;
   http_fd = visualizer_http_fd(afl);
   len = write(http_fd, data, strlen(data));
   if (len == strlen(data)) {
 
     bzero(buf, sizeof(buf));
-    len = read(http_fd, buf, 0x3ff);
-    if (len > 0) {
+    visualizer_http_recv(http_fd, buf, 0x3ff);
 
-      ptr = strstr(buf, "\r\n\r\n");
-      if (ptr != NULL) {
+    ptr = strstr(buf, "\r\n\r\n");
+    if (ptr != NULL) {
 
-	ptr += 4;
-	conf = ck_alloc(sizeof(*conf));
-	len = sscanf(ptr, "%d%Lx%d%n", (int *) &conf->action, &conf->addr, &conf->value_num, &offset);
-	if (len == 3) {
-
-	  ptr += offset;
-	  conf->values = ck_alloc(sizeof(vis_value_t) * conf->value_num);
-	  for (i = 0; i < conf->value_num; ++i) {
-
-	    len = sscanf(ptr, "%19s%Lx%n", conf->values[i].reg, &conf->values[i].value, &offset);
-	    if (len != 2) { break; }
-	    ptr += offset;
-
-	  }
-	  if (len == 2) {
-
-	    close(http_fd);
-	    return conf;
-
-	  }
-
-	  ck_free(conf->values);
-
-	}
-
-	ck_free(conf);
-
-      }
+      ptr += 4;
+      conf = visualizer_alloc_config(ptr);
+      close(http_fd);
+      return conf;
 
     }
 
@@ -89,7 +125,8 @@ vis_config_t *visualizer_get_config(afl_state_t *afl) {
 static void visualizer_get_state(afl_state_t *afl) {
 
   // inform forkserver to read config
-  kill(afl->fsrv.fsrv_pid, SIGUSR2);
+  // kill(afl->fsrv.fsrv_pid, SIGUSR2);
+  afl->visualizer_port = afl->visualizer_port;
   // choose target seed
 
 }
@@ -117,8 +154,7 @@ void visualizer_afl(afl_state_t *afl) {
 
     }
 
-    ck_free(conf->values);
-    ck_free(conf);
+    visualizer_free_config(conf);
 
   }
 

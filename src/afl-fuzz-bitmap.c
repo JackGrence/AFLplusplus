@@ -627,11 +627,18 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
     ck_write(fd, mem, len, queue_fn);
     close(fd);
 
+    u8 *vis_fn;
     if (afl->visualizer_mode) {
 
       // Do we need to free queue_fn?
       // prepare the seed
-      visualizer_prepare_seed(afl, queue_fn);
+      vis_fn = alloc_printf("%s/visualizer/id:%06u,%s", afl->out_dir,
+			    afl->queued_paths, describe_op(afl, hnb));
+      fd = open(vis_fn, O_WRONLY | O_CREAT | O_EXCL, 0600);
+      if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", vis_fn); }
+      ck_write(fd, mem, len, vis_fn);
+      close(fd);
+      visualizer_prepare_seed(afl, vis_fn);
 
     }
 
