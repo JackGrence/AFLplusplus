@@ -157,6 +157,8 @@ void afl_state_init(afl_state_t *afl, uint32_t map_size) {
 
   afl->visualizer_mode = 0;
   afl->visualizer_requested = 0;
+  afl->visualizer_host = "127.0.0.1";
+  afl->visualizer_port = 5000;
 
   init_mopt_globals(afl);
 

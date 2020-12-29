@@ -661,6 +661,8 @@ typedef struct afl_state {
 
   u32 visualizer_mode;
   u32 visualizer_requested;
+  u8 *visualizer_host;
+  u16 visualizer_port;
 
 } afl_state_t;
 
