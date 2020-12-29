@@ -540,6 +540,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
   if (unlikely(len == 0)) { return 0; }
 
+  u8 *vis_fn = "";
   u8 *queue_fn = "";
   u8  hnb = '\0';
   s32 fd;
@@ -596,6 +597,10 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
 #endif                                                    /* ^!SIMPLE_FILES */
 
+    // use SIMPLE_FILES to avoid URL escape
+    vis_fn =
+	alloc_printf("%s/visualizer/id_%06u", afl->out_dir, afl->queued_paths);
+
     add_to_queue(afl, queue_fn, len, 0);
 
     if (hnb == 2) {
@@ -627,13 +632,10 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
     ck_write(fd, mem, len, queue_fn);
     close(fd);
 
-    u8 *vis_fn;
     if (afl->visualizer_mode) {
 
       // Do we need to free queue_fn?
-      // prepare the seed, use SIMPLE_FILES to avoid URL escape
-      vis_fn =
-          alloc_printf("%s/visualizer/id_%06u", afl->out_dir, afl->queued_paths);
+      // prepare the seed
       fd = open(vis_fn, O_WRONLY | O_CREAT | O_EXCL, 0600);
       if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", vis_fn); }
       ck_write(fd, mem, len, vis_fn);
