@@ -1,133 +1,42 @@
 #include "visualizer.h"
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <arpa/inet.h>
 #include <unistd.h>
 
-static int visualizer_http_fd(afl_state_t *afl) {
 
-  int http_fd;
-  struct sockaddr_in web_addr;
+static void visualizer_get_state(afl_state_t *afl, vis_config_t *conf) {
 
-  http_fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (http_fd == -1) { PFATAL("socket"); }
-  bzero(&web_addr, sizeof(web_addr));
-
-  web_addr.sin_family = AF_INET;
-  web_addr.sin_addr.s_addr = inet_addr(afl->visualizer_host);
-  web_addr.sin_port = htons(afl->visualizer_port);
-
-  if (connect(http_fd, (struct sockaddr *) &web_addr, sizeof(web_addr)) != 0) {
-    close(http_fd);
-    PFATAL("connect");
-  }
-
-  return http_fd;
-}
-
-vis_config_t *visualizer_alloc_config(char *str) {
-
- /* "0 0x197d0 2 ./afl_inputs/vlanIntfs
-  * ./afl_inputs/vlan 2 r1 0 0x197d0 0x4141" */
-
-  vis_config_t *conf;
-  u32 offset, i;
-
-  // TODO: sscanf check
-  conf = ck_alloc(sizeof(*conf));
-  sscanf(str, "%d%Lx%d%n", (int *) &conf->action,
-	 &conf->addr, &conf->seed_num, &offset);
-  str += offset;
-
-  // parse seed
-  conf->seeds = ck_alloc(sizeof(char *) * conf->seed_num);
-  for (i = 0; i < conf->seed_num; ++i) {
-    conf->seeds[i] = ck_alloc(0x100);
-    sscanf(str, "%255s%n", conf->seeds[i], &offset);
-    str += offset;
-  }
-
-  // parse value
-  sscanf(str, "%d%n", &conf->value_num, &offset);
-  str += offset;
-  conf->values = ck_alloc(sizeof(vis_value_t) * conf->value_num);
-  for (i = 0; i < conf->value_num; ++i) {
-
-    sscanf(str, "%19s%Lx%n", conf->values[i].reg,
-	   &conf->values[i].value, &offset);
-    str += offset;
-
-  }
-
-  return conf;
-
-}
-
-void visualizer_free_config(vis_config_t *config) {
-
-  u32 i;
-  for (i = 0; i < config->seed_num; ++i) {
-    ck_free(config->seeds[i]);
-  }
-  ck_free(config->seeds);
-  ck_free(config->values);
-  ck_free(config);
-
-}
-
-static void visualizer_http_recv(int fd, char *buf, int len) {
-
-  int offset;
-  while ((offset = read(fd, buf, len)) > 0) {
-      buf += offset;
-      len -= offset;
-  }
-
-  if (offset < 0) { FATAL("HTTP recv fail"); }
-
-}
-
-vis_config_t *visualizer_get_config(afl_state_t *afl) {
-
-  int http_fd;
-  char *data = "GET /fuzzer HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
-  char buf[0x400];
-  char *ptr;
+  u8 *fn;
+  u8 *buf;
   u32 len;
-  vis_config_t *conf;
-  http_fd = visualizer_http_fd(afl);
-  len = write(http_fd, data, strlen(data));
-  if (len == strlen(data)) {
+  u32 fd;
+  struct stat st;
 
-    bzero(buf, sizeof(buf));
-    visualizer_http_recv(http_fd, buf, 0x3ff);
+  fn = conf->seeds[0];
 
-    ptr = strstr(buf, "\r\n\r\n");
-    if (ptr != NULL) {
+  if (lstat(fn, &st) || access(fn, R_OK)) {
 
-      ptr += 4;
-      conf = visualizer_alloc_config(ptr);
-      close(http_fd);
-      return conf;
-
-    }
+    PFATAL("Unable to access '%s'", fn);
 
   }
 
-  close(http_fd);
-  FATAL("HTTP request fail");
-  return NULL;
+  fd = open(fn, O_RDONLY);
 
-}
+  if (unlikely(fd < 0)) {
 
-static void visualizer_get_state(afl_state_t *afl) {
+    PFATAL("Unable to open '%s'", fn);
+
+  }
+
+  len = st.st_size;
+
+  buf = mmap(0, len, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+
+  write_to_testcase(afl, buf, len);
 
   // inform forkserver to read config
-  // kill(afl->fsrv.fsrv_pid, SIGUSR2);
-  afl->visualizer_port = afl->visualizer_port;
-  // choose target seed
+  kill(afl->fsrv.fsrv_pid, SIGUSR2);
+  u8 fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+
+  munmap(buf, len);
 
 }
 
@@ -135,12 +44,12 @@ void visualizer_afl(afl_state_t *afl) {
 
   vis_config_t *conf;
   conf = visualizer_get_config(afl);
-  if (!conf) {
+  if (conf) {
 
     switch (conf->action) {
 
       case VIS_GET_STATE:
-	visualizer_get_state(afl);
+	visualizer_get_state(afl, conf);
 	break;
 
       case VIS_GET_RELATION:

@@ -811,6 +811,8 @@ int main(int argc, char **argv_orig, char **envp) {
 
       case 'Z':
 	afl->visualizer_mode = 1;
+	if (!getenv("AFL_VISHOST")) { setenv("AFL_VISHOST", "127.0.0.1", 1); }
+	if (!getenv("AFL_VISPORT")) { setenv("AFL_VISPORT", "5000", 1); }
 	break;
 
       default:
