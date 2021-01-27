@@ -24,6 +24,7 @@
  */
 
 #include "afl-fuzz.h"
+#include "visualizer.h"
 #include <limits.h>
 
 #ifdef HAVE_AFFINITY
@@ -1034,6 +1035,7 @@ void pivot_inputs(afl_state_t *afl) {
   while (q) {
 
     u8 *nfn, *rsl = strrchr(q->fname, '/');
+    u8 *vis_fn;
     u32 orig_id;
 
     if (!rsl) {
@@ -1106,6 +1108,18 @@ void pivot_inputs(afl_state_t *afl) {
       nfn = alloc_printf("%s/queue/id_%06u", afl->out_dir, id);
 
 #endif                                                    /* ^!SIMPLE_FILES */
+
+    }
+
+    if (afl->visualizer_mode) {
+
+      // use SIMPLE_FILES to avoid URL escape
+      vis_fn =
+	  alloc_printf("%s/visualizer/id_%06u", afl->out_dir, id);
+      // Do we need to free queue_fn?
+      // prepare the seed
+      link_or_copy(q->fname, vis_fn);
+      visualizer_prepare_seed(afl, vis_fn);
 
     }
 
