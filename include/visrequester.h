@@ -13,6 +13,13 @@
 
 #define VISFATAL(x) { puts(x); abort(); }
 #define VISPFATAL(x) { perror(x); abort(); }
+#define HEADER_GET(url) ("GET " url " HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+#define VIS_REQUEST_GET(url, buf, size)			\
+  do {							\
+							\
+    visualizer_request_get(HEADER_GET(url), buf, size); \
+							\
+  } while(0)
 
 typedef enum vis_action {
 
@@ -155,6 +162,30 @@ static inline vis_config_t *visualizer_get_config() {
   close(http_fd);
   VISFATAL("HTTP request fail");
   return NULL;
+
+}
+
+static void visualizer_request_get(char *request, char *buf, size_t size) {
+
+  int http_fd;
+  char *ptr;
+  size_t len;
+  http_fd = visualizer_http_fd();
+  len = write(http_fd, request, strlen(request));
+  if (len == strlen(request)) {
+
+    bzero(buf, size);
+    visualizer_http_recv(http_fd, buf, size - 1);
+    close(http_fd);
+    ptr = strstr(buf, "\r\n\r\n");
+    if (ptr != NULL) {
+
+      ptr += 4;
+      strcpy(buf, ptr);
+
+    }
+
+  }
 
 }
 

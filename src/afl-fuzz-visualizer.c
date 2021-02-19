@@ -2,6 +2,55 @@
 #include <unistd.h>
 
 
+void visualizer_constraints_set(afl_state_t *afl, u8 *buf, u32 size) {
+
+  LIST_FOREACH(&afl->visualizer_constraints_list, vis_constraint_t, {
+
+    if (el->offset < size)
+      memcpy(&buf[el->offset], el->data,
+	     MIN(size - el->offset, el->length));
+
+  });
+
+}
+
+void visualizer_constraints_get(afl_state_t *afl) {
+
+  char buf[0x400];
+  char *ptr = buf;
+  u32 offset;
+  u32 i, ind;
+  vis_constraint_t *constraint;
+
+  if (afl->visualizer_constraints_count) {
+
+    // clear old constraint
+    LIST_FOREACH_CLEAR(&afl->visualizer_constraints_list, vis_constraint_t, {
+      ck_free(el->data);
+      ck_free(el);
+    });
+    afl->visualizer_constraints_count = 0;
+
+  }
+
+  // parse constraint
+  VIS_REQUEST_GET("/fuzzer", buf, 0x400);
+  sscanf(ptr, "%d%n", &afl->visualizer_constraints_count, &offset);
+  ptr += offset;
+  for (i = 0; i < afl->visualizer_constraints_count; i++) {
+    constraint = ck_alloc(sizeof(vis_constraint_t));
+    sscanf(ptr, "%d%d%n", &constraint->offset, &constraint->length, &offset);
+    ptr += offset;
+    constraint->data = ck_alloc(constraint->length);
+    for (ind = 0; ind < constraint->length; ind++) {
+      sscanf(ptr, "%hhx%n", &constraint->data[ind], &offset);
+      ptr += offset;
+    }
+    list_append(&afl->visualizer_constraints_list, constraint);
+  }
+
+}
+
 static void visualizer_get_state(afl_state_t *afl, vis_config_t *conf) {
 
   u8 *fn;
@@ -35,6 +84,7 @@ static void visualizer_get_state(afl_state_t *afl, vis_config_t *conf) {
   // inform forkserver to read config
   kill(afl->fsrv.fsrv_pid, SIGUSR2);
   u8 fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+  kill(afl->fsrv.fsrv_pid, SIGUSR2);
 
   munmap(buf, len);
 

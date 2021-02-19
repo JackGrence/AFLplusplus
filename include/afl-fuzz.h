@@ -661,6 +661,8 @@ typedef struct afl_state {
 
   u32 visualizer_mode;
   u32 visualizer_requested;
+  u32 visualizer_constraints_count;
+  list_t visualizer_constraints_list;
 
 } afl_state_t;
 

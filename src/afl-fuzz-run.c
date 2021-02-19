@@ -863,8 +863,12 @@ common_fuzz_stuff(afl_state_t *afl, u8 *out_buf, u32 len) {
   u8 fault;
 
   if (afl->visualizer_requested) {
-    visualizer_afl(afl);
+    visualizer_constraints_get(afl);
     afl->visualizer_requested = 0;
+  }
+
+  if (afl->visualizer_constraints_count) {
+    visualizer_constraints_set(afl, out_buf, len);
   }
 
   write_to_testcase(afl, out_buf, len);
