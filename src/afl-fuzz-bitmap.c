@@ -640,7 +640,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
       if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", vis_fn); }
       ck_write(fd, mem, len, vis_fn);
       close(fd);
-      visualizer_prepare_seed(afl, vis_fn);
+      visualizer_prepare_seed(vis_fn);
 
     }
 

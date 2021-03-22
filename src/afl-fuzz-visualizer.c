@@ -2,6 +2,62 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+static int visualizer_http_fd() {
+
+  int http_fd;
+  struct sockaddr_in web_addr;
+
+  http_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (http_fd == -1) { VISPFATAL("socket"); }
+  bzero(&web_addr, sizeof(web_addr));
+
+  web_addr.sin_family = AF_INET;
+  web_addr.sin_addr.s_addr = inet_addr(getenv("AFL_VISHOST"));
+  web_addr.sin_port = htons(atoi(getenv("AFL_VISPORT")));
+
+  if (connect(http_fd, (struct sockaddr *) &web_addr, sizeof(web_addr)) != 0) {
+    close(http_fd);
+    VISPFATAL("connect");
+  }
+
+  return http_fd;
+}
+
+static void visualizer_http_recv(int fd, char *buf, int len) {
+
+  int offset;
+  while ((offset = read(fd, buf, len)) > 0) {
+      buf += offset;
+      len -= offset;
+  }
+
+  if (offset < 0) { VISFATAL("HTTP recv fail"); }
+
+}
+
+static void visualizer_request_get(char *request, char *buf, size_t size) {
+
+  int http_fd;
+  char *ptr;
+  size_t len;
+  http_fd = visualizer_http_fd();
+  len = write(http_fd, request, strlen(request));
+  if (len == strlen(request)) {
+
+    bzero(buf, size);
+    visualizer_http_recv(http_fd, buf, size - 1);
+    close(http_fd);
+    ptr = strstr(buf, "\r\n\r\n");
+    if (ptr != NULL) {
+
+      ptr += 4;
+      strcpy(buf, ptr);
+
+    }
+
+  }
+
+}
 
 void visualizer_constraints_set(afl_state_t *afl, u8 *buf, u32 size) {
 
@@ -52,75 +108,7 @@ void visualizer_constraints_get(afl_state_t *afl) {
 
 }
 
-static void visualizer_get_state(afl_state_t *afl, vis_config_t *conf) {
-
-  u8 *fn;
-  u8 *buf;
-  u32 len;
-  u32 fd;
-  struct stat st;
-
-  fn = conf->seeds[0];
-
-  if (lstat(fn, &st) || access(fn, R_OK)) {
-
-    PFATAL("Unable to access '%s'", fn);
-
-  }
-
-  fd = open(fn, O_RDONLY);
-
-  if (unlikely(fd < 0)) {
-
-    PFATAL("Unable to open '%s'", fn);
-
-  }
-
-  len = st.st_size;
-
-  buf = mmap(0, len, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-
-  write_to_testcase(afl, buf, len);
-
-  // inform forkserver to read config
-  kill(afl->fsrv.fsrv_pid, SIGUSR2);
-  u8 fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
-  kill(afl->fsrv.fsrv_pid, SIGUSR2);
-
-  munmap(buf, len);
-
-}
-
-void visualizer_afl(afl_state_t *afl) {
-
-  vis_config_t *conf;
-  conf = visualizer_get_config(afl);
-  if (conf) {
-
-    switch (conf->action) {
-
-      case VIS_GET_STATE:
-	visualizer_get_state(afl, conf);
-	break;
-
-      case VIS_GET_RELATION:
-	break;
-
-      case VIS_SET_CONSTRAINT:
-	break;
-
-      default:
-	break;
-
-    }
-
-    visualizer_free_config(conf);
-
-  }
-
-}
-
-void visualizer_prepare_seed(afl_state_t *afl, u8 *queue_fn) {
+void visualizer_prepare_seed(u8 *queue_fn) {
 
   int http_fd;
   char *data = "GET /seed?fn=%s HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
@@ -130,7 +118,7 @@ void visualizer_prepare_seed(afl_state_t *afl, u8 *queue_fn) {
 
   buf = realpath(queue_fn, seedpath);
   if (buf == NULL) { FATAL("Seed path resolve fail"); }
-  http_fd = visualizer_http_fd(afl);
+  http_fd = visualizer_http_fd();
   buf = alloc_printf(data, seedpath);
   len = write(http_fd, buf, strlen(buf));
   if (len != strlen(buf)) { FATAL("HTTP request fail"); }
