@@ -1,5 +1,6 @@
 #include "visualizer.h"
 #include <unistd.h>
+#include <stdlib.h>
 
 
 void visualizer_constraints_set(afl_state_t *afl, u8 *buf, u32 size) {
@@ -124,10 +125,13 @@ void visualizer_prepare_seed(afl_state_t *afl, u8 *queue_fn) {
   int http_fd;
   char *data = "GET /seed?fn=%s HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
   char *buf = "";
+  char seedpath[PATH_MAX];
   u32 len;
 
+  buf = realpath(queue_fn, seedpath);
+  if (buf == NULL) { FATAL("Seed path resolve fail"); }
   http_fd = visualizer_http_fd(afl);
-  buf = alloc_printf(data, queue_fn);
+  buf = alloc_printf(data, seedpath);
   len = write(http_fd, buf, strlen(buf));
   if (len != strlen(buf)) { FATAL("HTTP request fail"); }
   ck_free(buf);
