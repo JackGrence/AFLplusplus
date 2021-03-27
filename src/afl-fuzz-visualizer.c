@@ -111,15 +111,17 @@ void visualizer_constraints_get(afl_state_t *afl) {
 void visualizer_prepare_seed(u8 *queue_fn) {
 
   int http_fd;
-  char *data = "GET /seed?fn=%s HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+  char *data = "GET /seed?fn=%s&pid=%d HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
   char *buf = "";
   char seedpath[PATH_MAX];
   u32 len;
+  pid_t pid;
 
+  pid = getpid();
   buf = realpath(queue_fn, seedpath);
   if (buf == NULL) { FATAL("Seed path resolve fail"); }
   http_fd = visualizer_http_fd();
-  buf = alloc_printf(data, seedpath);
+  buf = alloc_printf(data, seedpath, pid);
   len = write(http_fd, buf, strlen(buf));
   if (len != strlen(buf)) { FATAL("HTTP request fail"); }
   ck_free(buf);
