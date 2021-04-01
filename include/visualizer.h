@@ -14,11 +14,46 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+typedef enum constraint_type {
+
+  CONSTRAINT_RANGE = 0,
+  CONSTRAINT_ARRAY,
+
+} constraint_type_t;
+
+typedef enum constraint_endian {
+
+  ENDIAN_LITTLE = 0,
+  ENDIAN_BIG,
+  ENDIAN_BYTE,
+
+} constraint_endian_t;
+
+typedef struct constraint_data {
+
+  u32 length;
+
+  union {
+
+    u8  bytes[1];
+    u8  num8;
+    u16 num16;
+    u32 num32;
+    u64 num64;
+
+  } data;
+
+} constraint_data_t;
+
 typedef struct vis_constraint {
 
+  constraint_type_t constraint;
+  constraint_endian_t endian;
   u32 offset;
-  u32 length;
-  u8  *data;
+  u32 overwrite_len;
+  u32 data_cnt;
+  constraint_data_t *data[1];
+  // constraint_data_t *data[data_cnt] in here
 
 } vis_constraint_t;
 

@@ -63,9 +63,9 @@ void visualizer_constraints_set(afl_state_t *afl, u8 *buf, u32 size) {
 
   LIST_FOREACH(&afl->visualizer_constraints_list, vis_constraint_t, {
 
-    if (el->offset < size)
-      memcpy(&buf[el->offset], el->data,
-	     MIN(size - el->offset, el->length));
+//    if (el->offset < size)
+//      memcpy(&buf[el->offset], el->data,
+//             MIN(size - el->offset, el->length));
 
   });
 
@@ -75,15 +75,20 @@ void visualizer_constraints_get(afl_state_t *afl) {
 
   char buf[0x400];
   char *ptr = buf;
-  u32 offset;
-  u32 i, ind;
-  vis_constraint_t *constraint;
+  u32 offset, size;
+  u32 con_cnt, data_cnt, byte_cnt;
+  u64 value;
+  vis_constraint_t constraint_tmp;
+  vis_constraint_t *constraint_ptr;
+  constraint_data_t *data;
 
   if (afl->visualizer_constraints_count) {
 
     // clear old constraint
     LIST_FOREACH_CLEAR(&afl->visualizer_constraints_list, vis_constraint_t, {
-      ck_free(el->data);
+      for (data_cnt = 0; data_cnt < el->data_cnt; data_cnt++) {
+        ck_free(el->data[data_cnt]);
+      }
       ck_free(el);
     });
     afl->visualizer_constraints_count = 0;
@@ -94,16 +99,66 @@ void visualizer_constraints_get(afl_state_t *afl) {
   VIS_REQUEST_GET("/fuzzer", buf, 0x400);
   sscanf(ptr, "%d%n", &afl->visualizer_constraints_count, &offset);
   ptr += offset;
-  for (i = 0; i < afl->visualizer_constraints_count; i++) {
-    constraint = ck_alloc(sizeof(vis_constraint_t));
-    sscanf(ptr, "%d%d%n", &constraint->offset, &constraint->length, &offset);
+  for (con_cnt = 0; con_cnt < afl->visualizer_constraints_count; con_cnt++) {
+    constraint_ptr = &constraint_tmp;
+    sscanf(ptr, "%d%d%d%d%d%n",
+           (int *) &constraint_ptr->constraint,
+           (int *) &constraint_ptr->endian,
+           &constraint_ptr->offset,
+           &constraint_ptr->overwrite_len,
+           &constraint_ptr->data_cnt,
+           &offset);
     ptr += offset;
-    constraint->data = ck_alloc(constraint->length);
-    for (ind = 0; ind < constraint->length; ind++) {
-      sscanf(ptr, "%hhx%n", &constraint->data[ind], &offset);
+    // calc constraint size then malloc
+    size = sizeof(*constraint_ptr);
+    size += sizeof(void *) * constraint_ptr->data_cnt;
+    constraint_ptr = ck_alloc(size);
+    // copy back
+    *constraint_ptr = constraint_tmp;
+    // parse data
+    for (data_cnt = 0; data_cnt < constraint_ptr->data_cnt; data_cnt++) {
+
+      sscanf(ptr, "%d%n", &size, &offset);
       ptr += offset;
+      // I'm lazy to calculate the accurate size, just add it :3
+      data = ck_alloc(sizeof(*data) + size);
+      constraint_ptr->data[data_cnt] = data;
+      data->length = size;
+      // init data.num
+      memset(data->data.bytes, 0, 8);
+      // read bytes to constraint_data
+      for (byte_cnt = 0; byte_cnt < size; byte_cnt++) {
+
+        sscanf(ptr, "%hhx%n", &data->data.bytes[byte_cnt], &offset);
+        ptr += offset;
+
+      }
+      // translate network order to host order, ignore odd number now
+      if (constraint_ptr->endian != ENDIAN_BYTE) {
+
+        value = 0;
+        if (data->length == 8) {
+
+          value = ntohl(*(u32 *) data->data.bytes);
+          value = (value << 32) + ntohl(*(u32 *) &data->data.bytes[4]);
+
+        } else if (data->length == 4) {
+
+          value = ntohl(*(u32 *) data->data.bytes);
+
+        } else if (data->length == 2) {
+
+          value = ntohs(*(u16 *) data->data.bytes);
+
+        }
+        data->data.num64 = value;
+
+      }
+
     }
-    list_append(&afl->visualizer_constraints_list, constraint);
+
+    list_append(&afl->visualizer_constraints_list, constraint_ptr);
+
   }
 
 }
