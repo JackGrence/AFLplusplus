@@ -61,11 +61,67 @@ static void visualizer_request_get(char *request, char *buf, size_t size) {
 
 void visualizer_constraints_set(afl_state_t *afl, u8 *buf, u32 size) {
 
+  u32 ind, byte_ind;
+  u64 start, end;
+  u64 value;
+  u64 seed_value = 0;
+  constraint_data_t choosed_data;
+
   LIST_FOREACH(&afl->visualizer_constraints_list, vis_constraint_t, {
 
-//    if (el->offset < size)
-//      memcpy(&buf[el->offset], el->data,
-//             MIN(size - el->offset, el->length));
+    // generate index by seed
+    if (el->offset < size) {
+      memcpy(&seed_value, &buf[el->offset],
+             MIN(sizeof(seed_value),
+                 MIN(size - el->offset, el->overwrite_len)));
+    }
+    // choose data
+    if (el->constraint_type == CONSTRAINT_RANGE) {
+
+      if (el->data_cnt == 2) {
+
+        choosed_data = *el->data[0];
+        start = el->data[0]->data.num64;
+        end = el->data[1]->data.num64;
+        choosed_data.data.num64 = (seed_value % (end - start + 1)) + start;
+
+      }
+
+    } else {
+
+      choosed_data = *el->data[seed_value % el->data_cnt];
+
+    }
+    // modify buf
+    if (el->offset < size) {
+
+      value = choosed_data.data.num64;
+      // translate value to target endian
+      if (el->endian != ENDIAN_BYTE) {
+
+        for (ind = 0; ind < choosed_data.length; ind++) {
+
+          byte_ind = ind;
+
+          if (el->endian == ENDIAN_BIG) {
+
+            byte_ind = choosed_data.length - 1 - ind;
+
+          }
+
+          choosed_data.data.bytes[byte_ind] = value & 0xff;
+          value >>= 8;
+
+        }
+
+      }
+      // TODO: insert data.length - overwrite_len to buf.
+      //       but may be a bad idea.
+      memcpy(&buf[el->offset], choosed_data.data.bytes,
+             MIN(choosed_data.length,
+                 MIN(size - el->offset, el->overwrite_len)));
+
+    }
 
   });
 
@@ -102,7 +158,7 @@ void visualizer_constraints_get(afl_state_t *afl) {
   for (con_cnt = 0; con_cnt < afl->visualizer_constraints_count; con_cnt++) {
     constraint_ptr = &constraint_tmp;
     sscanf(ptr, "%d%d%d%d%d%n",
-           (int *) &constraint_ptr->constraint,
+           (int *) &constraint_ptr->constraint_type,
            (int *) &constraint_ptr->endian,
            &constraint_ptr->offset,
            &constraint_ptr->overwrite_len,
@@ -150,7 +206,14 @@ void visualizer_constraints_get(afl_state_t *afl) {
 
           value = ntohs(*(u16 *) data->data.bytes);
 
+        } else {
+
+          // ensure data->length in 1, 2, 4, 8
+          data->length = 1;
+          value = data->data.num8;
+
         }
+
         data->data.num64 = value;
 
       }

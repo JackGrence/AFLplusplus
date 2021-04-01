@@ -47,7 +47,7 @@ typedef struct constraint_data {
 
 typedef struct vis_constraint {
 
-  constraint_type_t constraint;
+  constraint_type_t constraint_type;
   constraint_endian_t endian;
   u32 offset;
   u32 overwrite_len;
