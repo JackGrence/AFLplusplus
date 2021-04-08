@@ -62,66 +62,85 @@ static void visualizer_request_get(char *request, char *buf, size_t size) {
 void visualizer_constraints_set(afl_state_t *afl, u8 *buf, u32 size) {
 
   u32 ind, byte_ind;
+  u32 overwrite_len;
   u64 start, end;
   u64 value;
   u64 seed_value = 0;
-  constraint_data_t choosed_data;
+  constraint_data_t tmp_data = {0};
+  constraint_data_t *choosed_data = &tmp_data;
 
   LIST_FOREACH(&afl->visualizer_constraints_list, vis_constraint_t, {
+    // do while to let we break and don't mess the LIST_FOREACH
+    do {
 
-    // generate index by seed
-    if (el->offset < size) {
+      if (el->offset >= size) { break; }
+      // generate index by seed
+      overwrite_len = MIN(size - el->offset, el->overwrite_len);
       memcpy(&seed_value, &buf[el->offset],
-             MIN(sizeof(seed_value),
-                 MIN(size - el->offset, el->overwrite_len)));
-    }
-    // choose data
-    if (el->constraint_type == CONSTRAINT_RANGE) {
+             MIN(sizeof(seed_value), overwrite_len));
+      // choose data
+      if (el->constraint_type == CONSTRAINT_RANGE) {
+        // TODO: check more logic bug
+        if (el->endian == ENDIAN_BYTE) { break; }
+        if (el->data_cnt != 2) { break; }
 
-      if (el->data_cnt == 2) {
-
-        choosed_data = *el->data[0];
+        *choosed_data = *el->data[0];
         start = el->data[0]->data.num64;
         end = el->data[1]->data.num64;
-        choosed_data.data.num64 = (seed_value % (end - start + 1)) + start;
+        // break if seed already in range
+        if (seed_value >= start && seed_value <= end) { break; }
+        choosed_data->data.num64 = (seed_value % (end - start + 1)) + start;
 
-      }
+      } else {
+        // break if seed already in whitelist
+        for (ind = 0; ind < el->data_cnt; ind++) {
 
-    } else {
+          if (!memcmp(buf, el->data[ind]->data.bytes,
+                      MIN(el->data[ind]->length, overwrite_len))) { break; }
 
-      choosed_data = *el->data[seed_value % el->data_cnt];
+        }
+        // choose data
+        if (el->endian != ENDIAN_BYTE) {
+          // number will be reorder, so take a copy
+          *choosed_data = *el->data[seed_value % el->data_cnt];
 
-    }
-    // modify buf
-    if (el->offset < size) {
-
-      value = choosed_data.data.num64;
-      // translate value to target endian
-      if (el->endian != ENDIAN_BYTE) {
-
-        for (ind = 0; ind < choosed_data.length; ind++) {
-
-          byte_ind = ind;
-
-          if (el->endian == ENDIAN_BIG) {
-
-            byte_ind = choosed_data.length - 1 - ind;
-
-          }
-
-          choosed_data.data.bytes[byte_ind] = value & 0xff;
-          value >>= 8;
+        } else {
+          // bytes have variant length, so take a reference
+          choosed_data = el->data[seed_value % el->data_cnt];
 
         }
 
       }
-      // TODO: insert data.length - overwrite_len to buf.
-      //       but may be a bad idea.
-      memcpy(&buf[el->offset], choosed_data.data.bytes,
-             MIN(choosed_data.length,
-                 MIN(size - el->offset, el->overwrite_len)));
+      // modify buf
+      if (el->offset < size) {
 
-    }
+        value = choosed_data->data.num64;
+        // translate value to target endian
+        if (el->endian != ENDIAN_BYTE) {
+
+          for (ind = 0; ind < choosed_data->length; ind++) {
+
+            byte_ind = ind;
+
+            if (el->endian == ENDIAN_BIG) {
+
+              byte_ind = choosed_data->length - 1 - ind;
+
+            }
+            // there is a copy of number, modify it is fine
+            choosed_data->data.bytes[byte_ind] = value & 0xff;
+            value >>= 8;
+
+          }
+
+        }
+        // TODO: insert data.length - overwrite_len to buf.
+        //       but may be a bad idea.
+        memcpy(&buf[el->offset], choosed_data->data.bytes,
+               MIN(choosed_data->length, overwrite_len));
+      }
+
+    } while (0);
 
   });
 
