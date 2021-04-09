@@ -59,25 +59,48 @@ static void visualizer_request_get(char *request, char *buf, size_t size) {
 
 }
 
+static u64 seed2rand(constraint_endian_t endian, u8 *buf, u32 size) {
+
+  u64 result = 0;
+  u32 i, ind;
+
+  for (i = 0; i < size; i++) {
+
+    ind = i;
+
+    if (endian == ENDIAN_LITTLE)
+      ind = size - i - 1;
+
+    result = (result << 8) + buf[ind];
+
+  }
+
+  return result;
+
+}
+
 void visualizer_constraints_set(afl_state_t *afl, u8 *buf, u32 size) {
 
   u32 ind, byte_ind;
   u32 overwrite_len;
   u64 start, end;
   u64 value;
-  u64 seed_value = 0;
-  constraint_data_t tmp_data = {0};
-  constraint_data_t *choosed_data = &tmp_data;
+  u64 seed_value;
+  constraint_data_t tmp_data;
+  constraint_data_t *choosed_data;
 
   LIST_FOREACH(&afl->visualizer_constraints_list, vis_constraint_t, {
     // do while to let we break and don't mess the LIST_FOREACH
     do {
 
       if (el->offset >= size) { break; }
+      // init
+      bzero(&tmp_data, sizeof(tmp_data));
+      choosed_data = &tmp_data;
       // generate index by seed
       overwrite_len = MIN(size - el->offset, el->overwrite_len);
-      memcpy(&seed_value, &buf[el->offset],
-             MIN(sizeof(seed_value), overwrite_len));
+      seed_value = seed2rand(el->endian, &buf[el->offset],
+                             MIN(sizeof(seed_value), overwrite_len));
       // choose data
       if (el->constraint_type == CONSTRAINT_RANGE) {
         // TODO: check more logic bug
