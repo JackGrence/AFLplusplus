@@ -1,6 +1,6 @@
 [submodule "unicorn_mode/unicornafl"]
 	path = unicorn_mode/unicornafl
-	url = https://github.com/AFLplusplus/unicornafl
+	url = https://github.com/JackGrence/unicornafl.git
 
 [submodule "custom_mutators/Grammar-Mutator"]
 	path = custom_mutators/Grammar-Mutator
